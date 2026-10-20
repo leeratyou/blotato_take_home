@@ -1,0 +1,33 @@
+{
+  "name": "blotato_take_home",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/app.ts",
+  "scripts": {
+    "start": "tsx src/app.ts",
+    "dev": "tsx watch src/app.ts",
+    "typecheck": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leeratyou/blotato_take_home.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/leeratyou/blotato_take_home/issues"
+  },
+  "homepage": "https://github.com/leeratyou/blotato_take_home#readme",
+  "dependencies": {
+    "@fastify/awilix": "^8.3.1",
+    "awilix": "^13.0.5",
+    "fastify": "^5.12.7",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}
