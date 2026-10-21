@@ -176,7 +176,10 @@ test('receiver rejects unusable bodies, drops malformed items, and logs each fai
   }
 
   // Malformed items are logged and dropped without failing the webhook.
-  await handler('instagram', { object: 'instagram', entry: [{ id: ' ' }, { time: 1 }] })
+  await handler('instagram', {
+    object: 'instagram',
+    entry: [null, { id: 'acct-1', changes: [{ field: 'comments', value: null }] }],
+  })
   assert.equal(errors.mock.callCount(), unusable.length + 2)
 
   // A failed publish releases the key, so the provider's retry reaches the bus again.

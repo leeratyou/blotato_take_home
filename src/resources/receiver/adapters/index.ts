@@ -1,11 +1,13 @@
 import type { InboundEvent } from '@/domain/events'
-import { parseInstagram } from '@/resources/receiver/adapters/instagram'
+import { parseInstagram, type InstagramWebhook } from '@/resources/receiver/adapters/instagram'
 
-// A webhook can batch several events; malformed items are reported in `errors` instead of failing the batch.
+// A webhook can batch several events; per-item parsing failures are returned in `errors`.
 export type ParseResult = { events: InboundEvent[]; errors: unknown[] }
 
 // One parser per source.
-const parsers = new Map<string, (raw: unknown) => ParseResult>([['instagram', parseInstagram]])
+const parsers = new Map<string, (raw: unknown) => ParseResult>([
+  ['instagram', raw => parseInstagram(raw as InstagramWebhook)],
+])
 
 export function parseInbound(source: string, raw: unknown): ParseResult {
   const parse = parsers.get(source)

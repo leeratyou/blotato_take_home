@@ -1,47 +1,28 @@
 import type { InboundEvent } from '@/domain/events'
 import type { ParseResult } from '@/resources/receiver/adapters'
 
-// Instagram webhook payload: { object: 'instagram', entry: [{ id, time, changes?, messaging? }] }.
 // Spec: https://developers.facebook.com/documentation/instagram-platform/webhooks/examples
-// Normalizes participant comments and DMs, plus message echoes as send confirmations; other fields are skipped.
+type InstagramComment = { id: string; from: { id: string }; text?: string }
+type InstagramChange = { field: string; value: unknown }
+type InstagramMessaging = {
+  sender: { id: string }
+  recipient: { id: string }
+  timestamp: number
+  message?: { mid: string; text?: string; is_echo?: boolean; is_deleted?: boolean }
+}
+type InstagramEntry = {
+  id: string
+  time: number
+  changes?: InstagramChange[]
+  messaging?: InstagramMessaging[]
+}
+export type InstagramWebhook = { object: 'instagram'; entry: InstagramEntry[] }
 
 const source = 'instagram'
 
-type Json = Record<string, unknown>
-
-function object(value: unknown, path: string): Json {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new TypeError(`Expected ${path} to be an object`)
-  }
-  return value as Json
-}
-
-function list(value: unknown, path: string): unknown[] {
-  if (value === undefined) return []
-  if (!Array.isArray(value)) throw new TypeError(`Expected ${path} to be an array`)
-  return value
-}
-
-function id(value: unknown, path: string): string {
-  if (typeof value !== 'string' || !value.trim()) {
-    throw new TypeError(`Expected ${path} to be a non-empty string`)
-  }
-  return value
-}
-
-function text(value: unknown, path: string): string {
-  if (value === undefined) return '' // Attachment-only message
-  if (typeof value !== 'string') throw new TypeError(`Expected ${path} to be a string`)
-  return value
-}
-
-// Meta uses seconds in some fields and milliseconds in others.
-// 1e12 ms is in 2001 and 1e12 s is far in the future, so the threshold is unambiguous.
-function time(value: unknown, path: string): string {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    throw new TypeError(`Expected ${path} to be a positive timestamp`)
-  }
-  return new Date(value < 1e12 ? value * 1000 : value).toISOString()
+function time(timestamp: number): string {
+  // Provider timestamps can use seconds or milliseconds.
+  return new Date(timestamp < 1e12 ? timestamp * 1000 : timestamp).toISOString()
 }
 
 function createEvent(input: Omit<InboundEvent, 'id' | 'source' | 'conversationId'>): InboundEvent {
@@ -49,61 +30,50 @@ function createEvent(input: Omit<InboundEvent, 'id' | 'source' | 'conversationId
     ...input,
     id: `${source}:${input.type}:${input.externalId}`,
     source,
-    // Assumes a comment author's id equals their DM sender id. Unverified: Meta returns the recipient's
-    // messaging id in the first private reply's response, and it may differ.
+    // Assumes comment and DM participant IDs correspond; identity mapping is not implemented.
     conversationId: `${source}:${input.accountId}:${input.participantId}`,
   }
 }
 
-function parseComment(item: unknown, accountId: string, entry: Json, entryPath: string, path: string): InboundEvent | undefined {
-  const change = object(item, path)
+function parseComment(change: InstagramChange, entry: InstagramEntry): InboundEvent | undefined {
   if (change.field !== 'comments') return
 
-  const value = object(change.value, `${path}.value`)
-  const authorId = id(object(value.from, `${path}.value.from`).id, `${path}.value.from.id`)
-  if (authorId === accountId) return // Own reply; the payload lacks the participant, so it cannot be a sending_confirm
+  const comment = change.value as InstagramComment
+  if (comment.from.id === entry.id) return // Ignore the account's own comments.
 
   return createEvent({
     type: 'comment_received',
-    externalId: id(value.id, `${path}.value.id`),
-    accountId,
-    participantId: authorId,
-    occurredAt: time(entry.time, `${entryPath}.time`),
-    text: text(value.text, `${path}.value.text`),
+    externalId: comment.id,
+    accountId: entry.id,
+    participantId: comment.from.id,
+    occurredAt: time(entry.time),
+    text: comment.text ?? '',
   })
 }
 
-function parseMessage(item: unknown, accountId: string, path: string): InboundEvent | undefined {
-  const messaging = object(item, path)
-  if (messaging.message === undefined) return // Read receipts, reactions, postbacks
-
-  const message = object(messaging.message, `${path}.message`)
-  if (message.is_deleted === true) return // Deletion notice
-
-  // An echo is the account's own sent message, so the participant is its recipient.
-  const echo = message.is_echo === true
-  const participant = echo ? 'recipient' : 'sender'
+function parseMessage(item: InstagramMessaging, accountId: string): InboundEvent | undefined {
+  const { message } = item
+  if (!message || message.is_deleted) return // Read receipts, reactions, and deletions.
 
   return createEvent({
-    type: echo ? 'sending_confirm' : 'dm_message',
-    externalId: id(message.mid, `${path}.message.mid`),
+    type: message.is_echo ? 'sending_confirm' : 'dm_message',
+    externalId: message.mid,
     accountId,
-    participantId: id(object(messaging[participant], `${path}.${participant}`).id, `${path}.${participant}.id`),
-    occurredAt: time(messaging.timestamp, `${path}.timestamp`),
-    text: text(message.text, `${path}.message.text`),
+    participantId: message.is_echo ? item.recipient.id : item.sender.id,
+    occurredAt: time(item.timestamp),
+    text: message.text ?? '', // Attachment-only messages have no text.
   })
 }
 
-function parseCollection(
-  value: unknown,
-  path: string,
-  parse: (item: unknown, path: string) => InboundEvent | undefined,
+function parseCollection<T>(
+  items: T[] = [],
+  parse: (item: T) => InboundEvent | undefined,
   result: ParseResult,
 ): void {
   try {
-    for (const [index, item] of list(value, path).entries()) {
+    for (const item of items) {
       try {
-        const event = parse(item, `${path}[${index}]`)
+        const event = parse(item)
         if (event) result.events.push(event)
       } catch (err) {
         result.errors.push(err)
@@ -114,29 +84,13 @@ function parseCollection(
   }
 }
 
-// An unusable body throws; a malformed entry or item is collected so the rest of the batch survives.
-export function parseInstagram(raw: unknown): ParseResult {
-  const body = object(raw, 'body')
-  if (body.object !== 'instagram') throw new TypeError('Expected an instagram webhook')
-
+// Payload fields follow the provider contract; native parsing failures are collected per item.
+export function parseInstagram(body: InstagramWebhook): ParseResult {
   const result: ParseResult = { events: [], errors: [] }
-  for (const [index, item] of list(body.entry, 'entry').entries()) {
+  for (const entry of body.entry) {
     try {
-      const entryPath = `entry[${index}]`
-      const entry = object(item, entryPath)
-      const accountId = id(entry.id, `${entryPath}.id`)
-
-      parseCollection(
-        entry.changes, `${entryPath}.changes`,
-        (change, path) => parseComment(change, accountId, entry, entryPath, path),
-        result
-      )
-
-      parseCollection(
-        entry.messaging, `${entryPath}.messaging`,
-        (message, path) => parseMessage(message, accountId, path),
-        result
-      )
+      parseCollection(entry.changes, change => parseComment(change, entry), result)
+      parseCollection(entry.messaging, message => parseMessage(message, entry.id), result)
     } catch (err) {
       result.errors.push(err)
     }
