@@ -6,7 +6,7 @@ The target system uses an event bus to connect social-network event ingestion, a
 
 The SNS Receiver and SNS Sender are existing integration boundaries, shown as black boxes.
 
-This document describes the target design in [Architecture.pdf](Architecture.pdf). The current application contains only a Fastify server and a health endpoint; the event-processing components are not implemented yet. [Architecture.mermaid.md](Architecture.mermaid.md) contains the diagram transcription and source annotations.
+This document describes the target design in [Architecture.pdf](Architecture.pdf). The current application contains a Fastify server, a health endpoint, and service stubs managed through DI and lifecycle hooks; event processing is not implemented yet. [Architecture.mermaid.md](Architecture.mermaid.md) contains the diagram transcription and source annotations.
 
 ## System diagram
 
@@ -57,11 +57,22 @@ The following contracts need to be defined before implementing the diagram:
 ## Layout
 
 - `src/app.ts`: Fastify server entry point
-- `src/resources/<name>/index.ts`: resource module exporting its domain handler
-- `src/di_container.ts`: Awilix DI container; registers app dependencies (currently the logger).
+- `src/routes.ts`: HTTP route registration
+- `src/resources.ts`: registers answering-engine, sender, and receiver resources.
+- `src/resources/<name>/index.ts`: event-handler factories and subscription registration.
+- `src/resources/<name>/<name>.usecases.ts`: plain use-case functions with explicit service and logger dependencies.
+- `src/services/di_container.ts`: Awilix DI container; registers the logger and service singletons.
 - `Architecture.pdf`: source diagram for the target system.
 - `Architecture.mermaid.md`: editable Mermaid transcription and source annotations.
 
+## Resource handlers and lifecycle
+
+Each resource follows the handler-factory pattern: resolve dependencies from `app.diContainer`, return an async event handler, and delegate to the resource's use-case functions. Handlers log errors and rethrow them. Use cases receive services, the logger, and event data explicitly; they do not depend on Fastify.
+
+The answering engine subscribes to `new` events, the sender subscribes to `answer` events, and the receiver subscribes to external events. Resources register subscriptions in `onReady`, with bus consumers registered before external intake. Each `onClose` hook calls the service's `unsubscribe` method with the same handler before DI disposal. Subscription methods retain callbacks and also return cleanup functions; external event delivery, sends, and business use cases remain explicit stubs.
+
+`SIGINT` and `SIGTERM` call `app.close()`; startup errors also close the app before exiting with a failure status. Worker-only processes can use `app.ready()` to run the same registration lifecycle without opening an HTTP listener.
+
 ## Routes
 
-- `GET /health`: liveness check; returns `{ "status": "ok" }`
+- `GET /healthcheck`: liveness check; returns `app`, `ok`, and `date`, plus optional `commit` and `id` metadata from the environment.
