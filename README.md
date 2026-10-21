@@ -20,3 +20,7 @@
 4. A human reviews the result
 
 For the next task, the LLMs swap implementation and review roles
+
+## Log:
+
+- [LOG.md](LOG.md) records the decisions I made, the tasks I completed myself, and the work done by LLMs.

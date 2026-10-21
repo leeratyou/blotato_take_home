@@ -20,5 +20,5 @@ Instructions for coding agents working in this repo.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): system structure
 - [RULES.md](RULES.md): coding rules
-- [PLAN.md](PLAN.md): current plan; finished plans go to [PLAN_ARCHIVE.md](PLAN_ARCHIVE.md)
+- [PLAN.md](PLAN.md): current plan, gaps, issues and open question; finished plans go to [PLAN_ARCHIVE.md](PLAN_ARCHIVE.md)
 - [MEMORY.md](MEMORY.md): decisions and learned facts; stale entries go to [MEMORY_ARCHIVE.md](MEMORY_ARCHIVE.md)
