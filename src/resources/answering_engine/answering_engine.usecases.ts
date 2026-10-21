@@ -10,6 +10,10 @@ export async function generateAnswer(ports: AnsweringPorts, event: CommentReceiv
     id: `answer:${event.id}`,
     conversationId: event.conversationId,
     type: 'answer',
+    source: event.source,
+    accountId: event.accountId,
+    participantId: event.participantId,
+    replyTo: { type: event.type, externalId: event.externalId },
     payload: { text: 'Stub answer' },
   })
 }

@@ -29,6 +29,8 @@ test('instagram adapter splits a webhook batch into comments, DMs, and send conf
     {
       id: 'instagram:comment_received:c-1',
       source: 'instagram',
+      accountId: 'acct-1',
+      participantId: 'user-1',
       kind: 'comment_received',
       externalId: 'c-1',
       conversationId: 'instagram:acct-1:user-1',
@@ -38,6 +40,8 @@ test('instagram adapter splits a webhook batch into comments, DMs, and send conf
     {
       id: 'instagram:dm_message:mid-1',
       source: 'instagram',
+      accountId: 'acct-1',
+      participantId: 'user-1',
       kind: 'dm_message',
       externalId: 'mid-1',
       conversationId: 'instagram:acct-1:user-1',
@@ -47,6 +51,8 @@ test('instagram adapter splits a webhook batch into comments, DMs, and send conf
     {
       id: 'instagram:sending_confirm:mid-2',
       source: 'instagram',
+      accountId: 'acct-1',
+      participantId: 'user-1',
       kind: 'sending_confirm',
       externalId: 'mid-2',
       conversationId: 'instagram:acct-1:user-1',
@@ -56,6 +62,8 @@ test('instagram adapter splits a webhook batch into comments, DMs, and send conf
     {
       id: 'instagram:dm_message:mid-3',
       source: 'instagram',
+      accountId: 'acct-1',
+      participantId: 'user-1',
       kind: 'dm_message',
       externalId: 'mid-3',
       conversationId: 'instagram:acct-1:user-1',

@@ -2,6 +2,8 @@
 export type InboundEvent = {
   id: string // Idempotency key: `${source}:${kind}:${externalId}`
   source: string
+  accountId: string
+  participantId: string
   // comment_received: a participant's comment on the account's media
   // dm_message: a participant's direct message
   // sending_confirm: provider echo of a message this account sent
@@ -17,10 +19,24 @@ export type CommentReceivedEvent = InboundPayload & { type: 'comment_received' }
 export type DmMessageEvent = InboundPayload & { type: 'dm_message' }
 export type SendingConfirmEvent = InboundPayload & { type: 'sending_confirm' }
 
-// Payload is a placeholder until Answer and Send schemas are defined.
 // conversationId is the bus partition key, shared by every event of one conversation.
-type Envelope = { id: string; conversationId: string; payload: unknown }
-export type AnswerEvent = Envelope & { type: 'answer' }
-export type SendEvent = Envelope & { type: 'send' }
+type OutboundRouting = {
+  id: string
+  conversationId: string
+  source: string
+  accountId: string
+  participantId: string
+}
+export type AnswerEvent = OutboundRouting & {
+  type: 'answer'
+  replyTo: { type: 'comment_received' | 'dm_message'; externalId: string }
+  payload: { text: string }
+}
+// The integration accepted the dispatch; a sending_confirm tracks delivery separately.
+export type SendEvent = OutboundRouting & {
+  type: 'send'
+  externalId: string
+  payload: { answerId: string }
+}
 
 export type BusEvent = CommentReceivedEvent | DmMessageEvent | SendingConfirmEvent | AnswerEvent | SendEvent

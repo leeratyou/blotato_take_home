@@ -7,6 +7,8 @@ import { receiveEvent, receiveEvents } from '@/resources/receiver/receiver.useca
 const event: InboundEvent = {
   id: 'instagram:comment_received:c-1',
   source: 'instagram',
+  accountId: 'acct-1',
+  participantId: 'user-1',
   kind: 'comment_received',
   externalId: 'c-1',
   conversationId: 'instagram:acct-1:user-1',
@@ -42,6 +44,8 @@ for (const kind of ['comment_received', 'dm_message', 'sending_confirm'] as cons
       id: inbound.id,
       type: kind,
       source: 'instagram',
+      accountId: 'acct-1',
+      participantId: 'user-1',
       externalId: 'c-1',
       conversationId: 'instagram:acct-1:user-1',
       occurredAt: '2023-11-14T22:13:20.000Z',

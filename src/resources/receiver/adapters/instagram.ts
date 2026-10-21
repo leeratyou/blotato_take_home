@@ -54,6 +54,8 @@ function event(
   return {
     id: `${source}:${kind}:${externalId}`,
     source,
+    accountId,
+    participantId,
     kind,
     externalId,
     // Assumes comment authors and message senders share one account-scoped id (see RESEARCH.md, identity).

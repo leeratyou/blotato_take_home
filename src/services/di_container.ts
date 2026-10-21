@@ -1,9 +1,11 @@
 import { aliasTo, asClass, asValue, createContainer, InjectionMode } from 'awilix'
 import type { Cradle } from '@fastify/awilix'
 import type { FastifyBaseLogger } from 'fastify'
-import type { EventPublisher, IdempotencyStore, MessageSender } from '@/domain/ports'
+import type { DeliveryStore, EventPublisher, IdempotencyStore, MessageSender } from '@/domain/ports'
 import { EventBus } from '@/services/event_bus'
+import { MemoryDeliveryStore } from '@/services/memory_delivery_store'
 import { MemoryIdempotencyStore } from '@/services/memory_idempotency_store'
+import { SourceMessageSender } from '@/services/message_sender'
 import { OuterReceiver } from '@/services/outer_receiver'
 import { OuterSender } from '@/services/outer_sender'
 
@@ -16,6 +18,7 @@ declare module '@fastify/awilix' {
     outerReceiver: OuterReceiver
     outerSender: OuterSender
     messageSender: MessageSender
+    deliveryStore: DeliveryStore
     idempotencyStore: IdempotencyStore
   }
 
@@ -32,7 +35,8 @@ export function buildContainer(logger: FastifyBaseLogger) {
     eventPublisher: aliasTo('eventBus'),
     outerReceiver: asClass(OuterReceiver).singleton(),
     outerSender: asClass(OuterSender).singleton(),
-    messageSender: aliasTo('outerSender'),
+    messageSender: asClass(SourceMessageSender).singleton(),
+    deliveryStore: asClass(MemoryDeliveryStore).singleton(),
     idempotencyStore: asClass(MemoryIdempotencyStore).singleton(),
   })
 
