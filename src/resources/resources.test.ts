@@ -38,7 +38,7 @@ test('resources use shared port bindings and unsubscribe their handlers without 
   assert.equal(outerUnsubscribe.mock.calls[0]?.arguments[0], outerSubscribe.mock.calls[0]?.arguments[0])
 })
 
-test('receiver validates external envelopes and logs each failure once', async t => {
+test('receiver rejects unusable bodies, drops malformed items, and logs each failure once', async t => {
   const app = Fastify()
   t.after(() => app.close())
   const container = buildContainer(app.log)
@@ -47,29 +47,33 @@ test('receiver validates external envelopes and logs each failure once', async t
   await app.register(resources)
   await app.ready()
   const handler = receiveEventHandler(app)
-  const malformed: [string, unknown][] = [
+  const unusable: [string, unknown][] = [
     ['unknown', { object: 'instagram', entry: [] }],
     ['instagram', undefined],
     ['instagram', null],
     ['instagram', []],
     ['instagram', 'event'],
     ['instagram', {}],
-    ['instagram', { object: 'instagram', entry: [{ id: ' ' }] }],
   ]
 
-  for (const [index, [source, event]] of malformed.entries()) {
-    await assert.rejects(handler(source, event), TypeError)
+  for (const [index, [source, raw]] of unusable.entries()) {
+    await assert.rejects(handler(source, raw), TypeError)
     assert.equal(errors.mock.callCount(), index + 1)
   }
 
-  await handler('instagram', { object: 'instagram', entry: [] })
-  assert.equal(errors.mock.callCount(), malformed.length)
+  // Malformed items are logged and dropped without failing the webhook.
+  await handler('instagram', { object: 'instagram', entry: [{ id: ' ' }, { time: 1 }] })
+  assert.equal(errors.mock.callCount(), unusable.length + 2)
 
   // A failed publish releases the key, so the provider's retry reaches the bus again.
   const comment = { field: 'comments', value: { id: 'c-1', text: 'pricing', from: { id: 'user-1' } } }
   const webhook = { object: 'instagram', entry: [{ id: 'acct-1', time: 1, changes: [comment] }] }
   for (const attempt of [1, 2]) {
-    await assert.rejects(handler('instagram', webhook), { message: 'EventBus.send is not implemented' })
-    assert.equal(errors.mock.callCount(), malformed.length + attempt)
+    await assert.rejects(handler('instagram', webhook), (err: unknown) => {
+      assert.ok(err instanceof AggregateError)
+      assert.deepEqual(err.errors.map(e => e.message), ['EventBus.send is not implemented'])
+      return true
+    })
+    assert.equal(errors.mock.callCount(), unusable.length + 2 + attempt)
   }
 })

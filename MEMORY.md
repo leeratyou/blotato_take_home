@@ -15,3 +15,11 @@ Why not `recipient_id + timestamp`: two distinct messages to the same recipient 
 Deduplication happens in the receiver use case through an `IdempotencyStore` port with an atomic `claim` (for example Redis `SET NX EX` or Postgres `INSERT ... ON CONFLICT DO NOTHING`) and a TTL at least as long as the provider's redelivery window. If publishing the New event fails, the use case calls `release` so the provider's retry is not treated as a duplicate.
 
 The TTL is seven days: after that a comment can no longer receive a private reply, so a later redelivery cannot start the flow. The current store is in memory (`MemoryIdempotencyStore`), so keys are lost on restart and not shared between instances. A crash between `claim` and publishing loses the event; a transactional outbox closes this gap.
+
+## 2026-10-21: Receiver batch failures
+
+One webhook can carry several events, so one bad item must not block the rest:
+
+- A malformed entry or item is logged and dropped; the webhook still succeeds. Retrying cannot fix it, and endless failures make Meta unsubscribe the webhook. Dropped items survive only in logs until a dead-letter store exists.
+- An unknown source or unusable body (not an object, wrong `object`, `entry` not an array) throws, because nothing in it can be processed.
+- `receiveEvents` processes each event independently and throws one `AggregateError` for the failures. A provider retry re-processes only those, because published events are skipped as duplicates.

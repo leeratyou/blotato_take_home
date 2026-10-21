@@ -3,7 +3,7 @@ import test from 'node:test'
 import { parseInbound } from '@/resources/receiver/adapters'
 
 test('instagram adapter splits a webhook batch into comments, DMs, and send confirmations', () => {
-  const events = parseInbound('instagram', {
+  const { events, errors } = parseInbound('instagram', {
     object: 'instagram',
     entry: [
       {
@@ -24,6 +24,7 @@ test('instagram adapter splits a webhook batch into comments, DMs, and send conf
     ],
   })
 
+  assert.deepEqual(errors, [])
   assert.deepEqual(events, [
     {
       id: 'instagram:comment_received:c-1',
@@ -64,16 +65,41 @@ test('instagram adapter splits a webhook batch into comments, DMs, and send conf
   ])
 })
 
-test('adapters reject unknown sources and malformed instagram payloads', () => {
+test('adapters throw on unknown sources and unusable webhook bodies', () => {
   assert.throws(() => parseInbound('toString', {}), { message: 'Unknown event source: toString' })
 
-  const malformed = [
-    { object: 'page', entry: [] },
-    { object: 'instagram', entry: {} },
-    { object: 'instagram', entry: [{ time: 1 }] },
-    { object: 'instagram', entry: [{ id: 'acct-1', changes: [{ field: 'comments', value: { id: 'c-1', from: { id: 'u' } } }] }] },
-    { object: 'instagram', entry: [{ id: 'acct-1', messaging: [{ sender: { id: 'u' }, timestamp: 1, message: { text: 'hi' } }] }] },
-    { object: 'instagram', entry: [{ id: 'acct-1', messaging: [{ sender: { id: 'acct-1' }, timestamp: 1, message: { mid: 'm', is_echo: true } }] }] },
-  ]
-  for (const raw of malformed) assert.throws(() => parseInbound('instagram', raw), TypeError)
+  const unusable = [undefined, null, [], 'event', {}, { object: 'page', entry: [] }, { object: 'instagram', entry: {} }]
+  for (const raw of unusable) assert.throws(() => parseInbound('instagram', raw), TypeError)
+})
+
+test('instagram adapter keeps valid items and reports malformed siblings', () => {
+  const { events, errors } = parseInbound('instagram', {
+    object: 'instagram',
+    entry: [
+      { time: 1 },
+      {
+        id: 'acct-1',
+        time: 1_700_000_000,
+        changes: [
+          { field: 'comments', value: { from: { id: 'user-1' } } },
+          { field: 'comments', value: { id: 'c-1', text: 'pricing', from: { id: 'user-1' } } },
+        ],
+        messaging: [
+          { sender: { id: 'user-1' }, timestamp: 1, message: { text: 'hi' } },
+          { sender: { id: 'acct-1' }, timestamp: 1, message: { mid: 'm', is_echo: true } },
+        ],
+      },
+    ],
+  })
+
+  assert.deepEqual(events.map(e => e.id), ['instagram:comment_received:c-1'])
+  assert.deepEqual(
+    errors.map(e => (e as Error).message),
+    [
+      'Expected entry[0].id to be a non-empty string',
+      'Expected entry[1].changes[0].value.id to be a non-empty string',
+      'Expected entry[1].messaging[0].message.mid to be a non-empty string',
+      'Expected entry[1].messaging[1].recipient to be an object',
+    ],
+  )
 })

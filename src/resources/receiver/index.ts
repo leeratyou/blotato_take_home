@@ -1,17 +1,20 @@
 import type { FastifyInstance } from 'fastify'
 import { parseInbound } from '@/resources/receiver/adapters'
-import { receiveEvent } from '@/resources/receiver/receiver.usecases'
+import { receiveEvents } from '@/resources/receiver/receiver.usecases'
 
 export function receiveEventHandler(app: FastifyInstance) {
-  const publisher = app.diContainer.resolve('eventPublisher')
-  const idempotency = app.diContainer.resolve('idempotencyStore')
+  const ports = {
+    publisher: app.diContainer.resolve('eventPublisher'),
+    idempotency: app.diContainer.resolve('idempotencyStore'),
+  }
   const logger = app.diContainer.resolve('logger')
 
-  return async (source: string, event: unknown): Promise<void> => {
+  return async (source: string, raw: unknown): Promise<void> => {
     try {
-      for (const inbound of parseInbound(source, event)) {
-        await receiveEvent(publisher, idempotency, inbound)
-      }
+      const { events, errors } = parseInbound(source, raw)
+      // Malformed items fail the same way on every retry, so they are logged and dropped.
+      for (const err of errors) logger.error({ err, source }, 'Dropped malformed inbound item')
+      await receiveEvents(ports, events)
     } catch (err) {
       logger.error({ err, source }, 'Receiver handler failed')
       throw err
@@ -19,7 +22,7 @@ export function receiveEventHandler(app: FastifyInstance) {
   }
 }
 
-export default async function receiverResource(app: FastifyInstance): Promise<void> {
+export default async function receiver(app: FastifyInstance): Promise<void> {
   const outerReceiver = app.diContainer.resolve('outerReceiver')
   const handler = receiveEventHandler(app)
 
@@ -28,6 +31,6 @@ export default async function receiverResource(app: FastifyInstance): Promise<vo
   })
 
   app.addHook('onClose', async () => {
-    await outerReceiver.unsubscribe(handler)
+    outerReceiver.unsubscribe(handler)
   })
 }

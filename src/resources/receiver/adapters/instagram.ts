@@ -1,4 +1,5 @@
 import type { InboundEvent } from '@/domain/events'
+import type { ParseResult } from '@/resources/receiver/adapters'
 
 // Instagram webhook payload: { object: 'instagram', entry: [{ id, time, changes?, messaging? }] }.
 // Normalizes participant comments and DMs, plus message echoes as send confirmations; other fields are skipped.
@@ -105,21 +106,33 @@ function parseMessage(item: unknown, accountId: string, path: string): InboundEv
   ]
 }
 
-export function parseInstagram(raw: unknown): InboundEvent[] {
+// An unusable body throws; a malformed entry or item is collected so the rest of the batch survives.
+export function parseInstagram(raw: unknown): ParseResult {
   const body = object(raw, 'body')
   if (body.object !== 'instagram') throw new TypeError('Expected an instagram webhook')
 
-  return list(body.entry, 'entry').flatMap((item, i) => {
-    const entry = object(item, `entry[${i}]`)
-    const accountId = id(entry.id, `entry[${i}].id`)
+  const result: ParseResult = { events: [], errors: [] }
+  const collect = (parse: () => InboundEvent[]) => {
+    try {
+      result.events.push(...parse())
+    } catch (err) {
+      result.errors.push(err)
+    }
+  }
 
-    return [
-      ...list(entry.changes, `entry[${i}].changes`).flatMap((change, j) =>
-        parseComment(change, accountId, entry, `entry[${i}]`, `entry[${i}].changes[${j}]`),
-      ),
-      ...list(entry.messaging, `entry[${i}].messaging`).flatMap((messaging, j) =>
-        parseMessage(messaging, accountId, `entry[${i}].messaging[${j}]`),
-      ),
-    ]
-  })
+  list(body.entry, 'entry').forEach((item, i) =>
+    collect(() => {
+      const entry = object(item, `entry[${i}]`)
+      const accountId = id(entry.id, `entry[${i}].id`)
+      list(entry.changes, `entry[${i}].changes`).forEach((change, j) =>
+        collect(() => parseComment(change, accountId, entry, `entry[${i}]`, `entry[${i}].changes[${j}]`)),
+      )
+      list(entry.messaging, `entry[${i}].messaging`).forEach((messaging, j) =>
+        collect(() => parseMessage(messaging, accountId, `entry[${i}].messaging[${j}]`)),
+      )
+      return []
+    }),
+  )
+
+  return result
 }
