@@ -10,7 +10,13 @@
 
 ## Project:
 
-- **!Important** - This repo is a single deployable app to keep the take-home simple. A real project should split into microservices (ingestion, automation engine, outbound sender, analytics) so each can scale and fail on its own.
+- **!Important** - This repo is a single deployable app to keep the take-home simple. A real project should split into microservices (ingestion, automation engine, outbound sender, analytics) so each can scale and fail on its own
+
+## Architecture:
+
+[![Architecture diagram](Architecture.jpg)](Architecture.pdf)
+
+Details: [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Development workflow
 
@@ -22,5 +28,19 @@
 For the next task, the LLMs swap implementation and review roles
 
 ## Log:
+Who did what: me or an LLM
 
-- [LOG.md](LOG.md) records the decisions I made, the tasks I completed myself, and the work done by LLMs.
+| # | Work | By |
+| --- | --- | --- |
+| 1 | Architecture design | Me |
+| 2 | Stack choice | Me |
+| 3 | RULES and the documentation LLMs need | Me |
+| 4 | App setup following the chosen architecture and stack | LLM |
+| 5 | Clean architecture implementation | LLM |
+| 6 | Examples of the coding approach | Me |
+| 7 | Hand-written examples in the codebase | Me |
+| 8 | Fixes from review comments and documentation clarifications | LLM |
+| 9 | Business logic, built iteratively in about 10 steps | Both |
+| 10 | Architecture documentation review and update | Me |
+
+Lines of code written by hand: 10
