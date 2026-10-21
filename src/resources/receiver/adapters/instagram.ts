@@ -2,6 +2,7 @@ import type { InboundEvent } from '@/domain/events'
 import type { ParseResult } from '@/resources/receiver/adapters'
 
 // Instagram webhook payload: { object: 'instagram', entry: [{ id, time, changes?, messaging? }] }.
+// Spec: https://developers.facebook.com/documentation/instagram-platform/webhooks/examples
 // Normalizes participant comments and DMs, plus message echoes as send confirmations; other fields are skipped.
 
 const source = 'instagram'
@@ -43,70 +44,74 @@ function time(value: unknown, path: string): string {
   return new Date(value < 1e12 ? value * 1000 : value).toISOString()
 }
 
-function event(
-  kind: InboundEvent['kind'],
-  externalId: string,
-  accountId: string,
-  participantId: string,
-  occurredAt: string,
-  body: string,
-): InboundEvent {
+function createEvent(input: Omit<InboundEvent, 'id' | 'source' | 'conversationId'>): InboundEvent {
   return {
-    id: `${source}:${kind}:${externalId}`,
+    ...input,
+    id: `${source}:${input.type}:${input.externalId}`,
     source,
-    accountId,
-    participantId,
-    kind,
-    externalId,
     // Assumes a comment author's id equals their DM sender id. Unverified: Meta returns the recipient's
     // messaging id in the first private reply's response, and it may differ.
-    conversationId: `${source}:${accountId}:${participantId}`,
-    occurredAt,
-    text: body,
+    conversationId: `${source}:${input.accountId}:${input.participantId}`,
   }
 }
 
-function parseComment(item: unknown, accountId: string, entry: Json, entryPath: string, path: string): InboundEvent[] {
+function parseComment(item: unknown, accountId: string, entry: Json, entryPath: string, path: string): InboundEvent | undefined {
   const change = object(item, path)
-  if (change.field !== 'comments') return []
+  if (change.field !== 'comments') return
 
   const value = object(change.value, `${path}.value`)
   const authorId = id(object(value.from, `${path}.value.from`).id, `${path}.value.from.id`)
-  if (authorId === accountId) return [] // Own reply; the payload lacks the participant, so it cannot be a sending_confirm
+  if (authorId === accountId) return // Own reply; the payload lacks the participant, so it cannot be a sending_confirm
 
-  return [
-    event(
-      'comment_received',
-      id(value.id, `${path}.value.id`),
-      accountId,
-      authorId,
-      time(entry.time, `${entryPath}.time`),
-      text(value.text, `${path}.value.text`),
-    ),
-  ]
+  return createEvent({
+    type: 'comment_received',
+    externalId: id(value.id, `${path}.value.id`),
+    accountId,
+    participantId: authorId,
+    occurredAt: time(entry.time, `${entryPath}.time`),
+    text: text(value.text, `${path}.value.text`),
+  })
 }
 
-function parseMessage(item: unknown, accountId: string, path: string): InboundEvent[] {
+function parseMessage(item: unknown, accountId: string, path: string): InboundEvent | undefined {
   const messaging = object(item, path)
-  if (messaging.message === undefined) return [] // Read receipts, reactions, postbacks
+  if (messaging.message === undefined) return // Read receipts, reactions, postbacks
 
   const message = object(messaging.message, `${path}.message`)
-  if (message.is_deleted === true) return [] // Deletion notice
+  if (message.is_deleted === true) return // Deletion notice
 
   // An echo is the account's own sent message, so the participant is its recipient.
   const echo = message.is_echo === true
   const participant = echo ? 'recipient' : 'sender'
 
-  return [
-    event(
-      echo ? 'sending_confirm' : 'dm_message',
-      id(message.mid, `${path}.message.mid`),
-      accountId,
-      id(object(messaging[participant], `${path}.${participant}`).id, `${path}.${participant}.id`),
-      time(messaging.timestamp, `${path}.timestamp`),
-      text(message.text, `${path}.message.text`),
-    ),
-  ]
+  return createEvent({
+    type: echo ? 'sending_confirm' : 'dm_message',
+    externalId: id(message.mid, `${path}.message.mid`),
+    accountId,
+    participantId: id(object(messaging[participant], `${path}.${participant}`).id, `${path}.${participant}.id`),
+    occurredAt: time(messaging.timestamp, `${path}.timestamp`),
+    text: text(message.text, `${path}.message.text`),
+  })
+}
+
+function parseCollection(
+  value: unknown,
+  path: string,
+  parse: (item: unknown, path: string) => InboundEvent | undefined,
+  result: ParseResult,
+): void {
+  try {
+    for (const [index, item] of list(value, path).entries()) {
+      try {
+        const event = parse(item, `${path}[${index}]`)
+        if (event) result.events.push(event)
+      } catch (err) {
+        result.errors.push(err)
+      }
+    }
+  } catch (err) {
+    result.errors.push(err)
+  }
 }
 
 // An unusable body throws; a malformed entry or item is collected so the rest of the batch survives.
@@ -115,27 +120,27 @@ export function parseInstagram(raw: unknown): ParseResult {
   if (body.object !== 'instagram') throw new TypeError('Expected an instagram webhook')
 
   const result: ParseResult = { events: [], errors: [] }
-  const collect = (parse: () => InboundEvent[]) => {
+  for (const [index, item] of list(body.entry, 'entry').entries()) {
     try {
-      result.events.push(...parse())
+      const entryPath = `entry[${index}]`
+      const entry = object(item, entryPath)
+      const accountId = id(entry.id, `${entryPath}.id`)
+
+      parseCollection(
+        entry.changes, `${entryPath}.changes`,
+        (change, path) => parseComment(change, accountId, entry, entryPath, path),
+        result
+      )
+
+      parseCollection(
+        entry.messaging, `${entryPath}.messaging`,
+        (message, path) => parseMessage(message, accountId, path),
+        result
+      )
     } catch (err) {
       result.errors.push(err)
     }
   }
-
-  list(body.entry, 'entry').forEach((item, i) =>
-    collect(() => {
-      const entry = object(item, `entry[${i}]`)
-      const accountId = id(entry.id, `entry[${i}].id`)
-      list(entry.changes, `entry[${i}].changes`).forEach((change, j) =>
-        collect(() => parseComment(change, accountId, entry, `entry[${i}]`, `entry[${i}].changes[${j}]`)),
-      )
-      list(entry.messaging, `entry[${i}].messaging`).forEach((messaging, j) =>
-        collect(() => parseMessage(messaging, accountId, `entry[${i}].messaging[${j}]`)),
-      )
-      return []
-    }),
-  )
 
   return result
 }

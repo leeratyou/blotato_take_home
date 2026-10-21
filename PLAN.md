@@ -10,8 +10,8 @@ Fix the receiver review findings so concurrent retries and malformed webhook col
 
 - [ ] **P1: Distinguish pending and completed idempotency claims.** A duplicate arriving during publication must await the original outcome or remain retryable; it must not report successful processing before publication succeeds.
 - [ ] Add a regression test that blocks the first publication, submits a concurrent duplicate, then fails the publication. Verify the duplicate does not report success and a later retry can publish the event.
-- [ ] **P2: Isolate Instagram collection parsing.** Parse `changes` and `messaging` independently so a malformed collection cannot prevent valid sibling messages from being processed.
-- [ ] Add a regression test with `changes: {}` and valid `messaging`. Verify the valid message survives and the malformed collection is reported.
+- [x] **P2: Isolate Instagram collection parsing.** Parse `changes` and `messaging` independently so a malformed collection cannot prevent valid sibling messages from being processed.
+- [x] Add a regression test with `changes: {}` and valid `messaging`. Verify the valid message survives and the malformed collection is reported.
 - [ ] Run typecheck and the receiver, adapter, resource, and idempotency-store tests.
 
 ## Next: Missing send confirmations

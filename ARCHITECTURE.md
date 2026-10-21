@@ -26,7 +26,7 @@ Use cases depend on domain interfaces; handlers resolve dependencies and log err
 
 ## State and limits
 
-- Receiver deduplication lasts seven days. Concurrent claims and malformed collection handling have known gaps; see [PLAN.md](PLAN.md).
+- Receiver deduplication lasts seven days. Concurrent duplicate claims still have a known gap; see [PLAN.md](PLAN.md).
 - Sender shares concurrent work for the same answer and saves receipts before publishing `send`, so publication retries reuse accepted sends.
 - Delivery state is `sent` or `confirmed`. Early confirmations are retained. Confirmation means a provider echo, not recipient delivery or reading.
 - State is local to one process and lost on restart. Delivery records have no retention limit; crash-safe processing and coordination across workers are not implemented.

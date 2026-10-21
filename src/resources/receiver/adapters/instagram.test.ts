@@ -31,7 +31,7 @@ test('instagram adapter splits a webhook batch into comments, DMs, and send conf
       source: 'instagram',
       accountId: 'acct-1',
       participantId: 'user-1',
-      kind: 'comment_received',
+      type: 'comment_received',
       externalId: 'c-1',
       conversationId: 'instagram:acct-1:user-1',
       occurredAt: '2023-11-14T22:13:20.000Z',
@@ -42,7 +42,7 @@ test('instagram adapter splits a webhook batch into comments, DMs, and send conf
       source: 'instagram',
       accountId: 'acct-1',
       participantId: 'user-1',
-      kind: 'dm_message',
+      type: 'dm_message',
       externalId: 'mid-1',
       conversationId: 'instagram:acct-1:user-1',
       occurredAt: '2023-11-14T22:13:25.000Z',
@@ -53,7 +53,7 @@ test('instagram adapter splits a webhook batch into comments, DMs, and send conf
       source: 'instagram',
       accountId: 'acct-1',
       participantId: 'user-1',
-      kind: 'sending_confirm',
+      type: 'sending_confirm',
       externalId: 'mid-2',
       conversationId: 'instagram:acct-1:user-1',
       occurredAt: '2023-11-14T22:13:26.000Z',
@@ -64,7 +64,7 @@ test('instagram adapter splits a webhook batch into comments, DMs, and send conf
       source: 'instagram',
       accountId: 'acct-1',
       participantId: 'user-1',
-      kind: 'dm_message',
+      type: 'dm_message',
       externalId: 'mid-3',
       conversationId: 'instagram:acct-1:user-1',
       occurredAt: '2023-11-14T22:13:27.000Z',
@@ -111,3 +111,32 @@ test('instagram adapter keeps valid items and reports malformed siblings', () =>
     ],
   )
 })
+
+for (const collection of ['changes', 'messaging'] as const) {
+  test(`malformed ${collection} does not block the other collection or later entries`, () => {
+    const { events, errors } = parseInbound('instagram', {
+      object: 'instagram',
+      entry: [
+        {
+          id: 'acct-1',
+          time: 1_700_000_000,
+          changes: [{ field: 'comments', value: { id: 'c-1', text: 'pricing', from: { id: 'user-1' } } }],
+          messaging: [{ sender: { id: 'user-1' }, timestamp: 1_700_000_005_000, message: { mid: 'mid-1', text: 'Hi' } }],
+          [collection]: {},
+        },
+        {
+          id: 'acct-2',
+          messaging: [{ sender: { id: 'user-2' }, timestamp: 1_700_000_006_000, message: { mid: 'mid-2', text: 'Hello' } }],
+        },
+      ],
+    })
+
+    assert.deepEqual(events.map(event => event.id), [
+      collection === 'changes' ? 'instagram:dm_message:mid-1' : 'instagram:comment_received:c-1',
+      'instagram:dm_message:mid-2',
+    ])
+    assert.deepEqual(errors.map(error => (error as Error).message), [
+      `Expected entry[0].${collection} to be an array`,
+    ])
+  })
+}

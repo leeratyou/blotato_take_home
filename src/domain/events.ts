@@ -1,23 +1,22 @@
 // Normalized inbound event; every source adapter produces this shape.
-export type InboundEvent = {
-  id: string // Idempotency key: `${source}:${kind}:${externalId}`
+type InboundPayload = {
+  id: string // Idempotency key: `${source}:${type}:${externalId}`
   source: string
   accountId: string
   participantId: string
-  // comment_received: a participant's comment on the account's media
-  // dm_message: a participant's direct message
-  // sending_confirm: provider echo of a message this account sent
-  kind: 'comment_received' | 'dm_message' | 'sending_confirm'
   externalId: string // Provider id of the comment or message; reply target
   conversationId: string // Account-scoped participant; answering-engine context and bus partition key
   occurredAt: string // Provider time, ISO 8601; used only for ordering
   text: string
 }
 
-type InboundPayload = Omit<InboundEvent, 'kind'>
+// A participant's comment on the account's media.
 export type CommentReceivedEvent = InboundPayload & { type: 'comment_received' }
+// A participant's direct message.
 export type DmMessageEvent = InboundPayload & { type: 'dm_message' }
+// Provider echo of a message this account sent.
 export type SendingConfirmEvent = InboundPayload & { type: 'sending_confirm' }
+export type InboundEvent = CommentReceivedEvent | DmMessageEvent | SendingConfirmEvent
 
 // conversationId is the bus partition key, shared by every event of one conversation.
 type OutboundRouting = {
@@ -39,4 +38,4 @@ export type SendEvent = OutboundRouting & {
   payload: { answerId: string }
 }
 
-export type BusEvent = CommentReceivedEvent | DmMessageEvent | SendingConfirmEvent | AnswerEvent | SendEvent
+export type BusEvent = InboundEvent | AnswerEvent | SendEvent

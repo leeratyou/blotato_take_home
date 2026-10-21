@@ -6,7 +6,7 @@ Decisions and learned facts. Move stale entries to [MEMORY_ARCHIVE.md](MEMORY_AR
 
 The diagram annotates the receiver adapter with `recipient_id` and `timestamp`. Neither is used for deduplication:
 
-- Idempotency key: `${source}:${kind}:${providerEventId}`, stored as the inbound event `id`. Provider retries reuse their event id, so a retry maps to the same key. `kind` is included because a confirmation can share an id with the message it confirms. When a source has no event id, use the sha256 of the raw payload; this misses duplicates if the provider re-serializes on retry.
+- Idempotency key: `${source}:${type}:${providerEventId}`, stored as the inbound event `id`. Provider retries reuse their event id, so a retry maps to the same key. `type` is included because a confirmation can share an id with the message it confirms. When a source has no event id, use the sha256 of the raw payload; this misses duplicates if the provider re-serializes on retry.
 - `recipient_id` becomes `conversationId`. Only the answering engine uses it, to load the whole conversation.
 - `timestamp` becomes `occurredAt`, the provider timestamp, never the receive time. It is used only for ordering, because an earlier event can arrive after a later one due to network latency.
 
