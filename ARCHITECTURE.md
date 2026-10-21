@@ -42,7 +42,7 @@ Receiver adapters, answering engines, sender adapters, and analytics workers are
 
 The receiver adapter has two highlighted annotations: `Idempotency key: recipient_id` and `timestamp`. The design does not use either for deduplication (see [MEMORY.md](MEMORY.md)):
 
-- **Idempotency key:** `${source}:${kind}:${providerEventId}`, carried as the incoming event `id`. Sources without an event id fall back to a sha256 of the raw payload. The receiver use case claims the key atomically in an idempotency store with a TTL that covers the provider's redelivery window, and releases it if publishing the New event fails.
+- **Idempotency key:** `${source}:${kind}:${providerEventId}`, carried as the inbound event `id`. Sources without an event id fall back to a sha256 of the raw payload. The receiver use case claims the key atomically in an idempotency store with a TTL that covers the provider's redelivery window, and releases it if publishing the New event fails.
 - **`conversationId`** (from `recipient_id`): used only by the answering engine to load the whole conversation. It is also the intended bus partition key, so events from one conversation are consumed in order.
 - **`occurredAt`** (from `timestamp`): the provider's timestamp, used only to order events that arrive out of order because of network latency. Ties are broken by `id`.
 
@@ -69,6 +69,7 @@ The following contracts need to be defined before implementing the diagram:
 - `src/domain/ports.ts`: narrow event-publishing and message-sending interfaces.
 - `src/resources/<name>/index.ts`: event-handler factories and subscription registration.
 - `src/resources/<name>/<name>.usecases.ts`: plain use-case functions with explicit port and domain-event dependencies.
+- `src/services/memory_idempotency_store.ts`: in-memory `IdempotencyStore` with a seven-day TTL; per-process only.
 - `src/services/di_container.ts`: Awilix DI container; registers the logger, service singletons, and port bindings.
 - `Architecture.pdf`: source diagram for the target system.
 - `Architecture.mermaid.md`: editable Mermaid transcription and source annotations.
@@ -77,11 +78,11 @@ The following contracts need to be defined before implementing the diagram:
 
 Each resource follows the handler-factory pattern: resolve dependencies from `app.diContainer`, return an async event handler, and delegate to the resource's use-case functions. Handlers log errors once and rethrow them. Use cases import only domain contracts and receive ports and domain-event data explicitly. Logging remains in handlers because the current use cases do not need a logging port.
 
-`EventBus` implements `EventPublisher`; `OuterSender` implements `MessageSender`. The DI container binds `eventPublisher` to the existing `eventBus` singleton and `messageSender` to `outerSender`. Subscription management remains in resource adapters and concrete services, outside the use-case ports.
+`EventBus` implements `EventPublisher`; `OuterSender` implements `MessageSender`; `MemoryIdempotencyStore` implements `IdempotencyStore`. The DI container binds `eventPublisher` to the existing `eventBus` singleton, `messageSender` to `outerSender`, and `idempotencyStore` to a `MemoryIdempotencyStore` singleton. Subscription management remains in resource adapters and concrete services, outside the use-case ports.
 
 `OuterReceiver` delivers each raw event together with a `source` name. The receiver handler selects that source's parser from `src/resources/receiver/adapters/`. The parser validates the payload and returns a list of normalized `InboundEvent`s, because one webhook can batch several events. The handler then calls the use case once per event. Unknown sources and malformed payloads raise `TypeError`. The Instagram parser emits only inbound comments and messages. It skips the account's own replies and echoes, deleted messages, read receipts, reactions, and other webhook fields. Answering and sender handlers reject mismatched event kinds before invoking their use cases.
 
-The answering engine subscribes to `new` events, the sender subscribes to `answer` events, and the receiver subscribes to external events. Resources register subscriptions in `onReady`, with bus consumers registered before external intake. Each `onClose` hook calls the service's `unsubscribe` method with the same handler before DI disposal. Subscription methods retain callbacks and also return cleanup functions; external event delivery, sends, and business use cases remain explicit stubs.
+The answering engine subscribes to `new` events, the sender subscribes to `answer` events, and the receiver subscribes to external events. Resources register subscriptions in `onReady`, with bus consumers registered before external intake. Each `onClose` hook calls the service's `unsubscribe` method with the same handler before DI disposal. Subscription methods retain callbacks and also return cleanup functions; external event delivery, sends, matching, and the answering and sender use cases remain explicit stubs. The receiver use case claims each event's idempotency key, publishes a New event, and releases the key if publishing fails.
 
 `SIGINT` and `SIGTERM` call `app.close()`; startup errors also close the app before exiting with a failure status. Worker-only processes can use `app.ready()` to run the same registration lifecycle without opening an HTTP listener.
 

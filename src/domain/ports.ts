@@ -7,3 +7,9 @@ export interface EventPublisher {
 export interface MessageSender {
   send(answer: AnswerEvent): Promise<void>
 }
+
+export interface IdempotencyStore {
+  // Atomically records the key; false when it is already claimed.
+  claim(key: string): Promise<boolean>
+  release(key: string): Promise<void>
+}

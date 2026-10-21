@@ -65,10 +65,11 @@ test('receiver validates external envelopes and logs each failure once', async t
   await handler('instagram', { object: 'instagram', entry: [] })
   assert.equal(errors.mock.callCount(), malformed.length)
 
+  // A failed publish releases the key, so the provider's retry reaches the bus again.
   const comment = { field: 'comments', value: { id: 'c-1', text: 'pricing', from: { id: 'user-1' } } }
-  await assert.rejects(handler('instagram', { object: 'instagram', entry: [{ id: 'acct-1', time: 1, changes: [comment] }] }), {
-    name: 'Error',
-    message: 'receiveEvent is not implemented',
-  })
-  assert.equal(errors.mock.callCount(), malformed.length + 1)
+  const webhook = { object: 'instagram', entry: [{ id: 'acct-1', time: 1, changes: [comment] }] }
+  for (const attempt of [1, 2]) {
+    await assert.rejects(handler('instagram', webhook), { message: 'EventBus.send is not implemented' })
+    assert.equal(errors.mock.callCount(), malformed.length + attempt)
+  }
 })
