@@ -11,3 +11,12 @@
 ## Project:
 
 - **!Important** - This repo is a single deployable app to keep the take-home simple. A real project should split into microservices (ingestion, automation engine, outbound sender, analytics) so each can scale and fail on its own.
+
+## Development workflow
+
+1. Define the task
+2. One LLM writes the code
+3. A second LLM reviews it
+4. A human reviews the result
+
+For the next task, the LLMs swap implementation and review roles
