@@ -3,21 +3,34 @@ import type { BusEvent } from '@/domain/events'
 import { confirmSending, createAnswerSender } from '@/resources/sender/sender.usecases'
 
 export function sendAnswerHandler(app: FastifyInstance) {
-  const ports = {
+  const dispatchAnswer = createAnswerSender({
     sender: app.diContainer.resolve('messageSender'),
     publisher: app.diContainer.resolve('eventPublisher'),
     deliveries: app.diContainer.resolve('deliveryStore'),
-  }
-  const dispatchAnswer = createAnswerSender(ports)
+  })
   const logger = app.diContainer.resolve('logger')
 
   return async (event: BusEvent): Promise<void> => {
     try {
-      if (event.type === 'answer') await dispatchAnswer(event)
-      else if (event.type === 'sending_confirm') await confirmSending(ports, event)
-      else throw new TypeError('Expected an answer or sending_confirm event')
+      if (event.type !== 'answer') throw new TypeError('Expected an answer event')
+      await dispatchAnswer(event)
     } catch (err) {
-      logger.error({ err, eventId: event.id }, 'Sender handler failed')
+      logger.error({ err, eventId: event.id }, 'Failed to send answer')
+      throw err
+    }
+  }
+}
+
+export function confirmSendingHandler(app: FastifyInstance) {
+  const ports = { deliveries: app.diContainer.resolve('deliveryStore') }
+  const logger = app.diContainer.resolve('logger')
+
+  return async (event: BusEvent): Promise<void> => {
+    try {
+      if (event.type !== 'sending_confirm') throw new TypeError('Expected a sending_confirm event')
+      await confirmSending(ports, event)
+    } catch (err) {
+      logger.error({ err, eventId: event.id }, 'Failed to confirm sending')
       throw err
     }
   }
@@ -25,15 +38,16 @@ export function sendAnswerHandler(app: FastifyInstance) {
 
 export default async function sender(app: FastifyInstance) {
   const eventBus = app.diContainer.resolve('eventBus')
-  const handler = sendAnswerHandler(app)
+  const sendAnswer = sendAnswerHandler(app)
+  const confirm = confirmSendingHandler(app)
 
   app.addHook('onReady', async () => {
-    eventBus.subscribe('answer', handler)
-    eventBus.subscribe('sending_confirm', handler)
+    eventBus.subscribe('answer', sendAnswer)
+    eventBus.subscribe('sending_confirm', confirm)
   })
 
   app.addHook('onClose', async () => {
-    eventBus.unsubscribe('answer', handler)
-    eventBus.unsubscribe('sending_confirm', handler)
+    eventBus.unsubscribe('answer', sendAnswer)
+    eventBus.unsubscribe('sending_confirm', confirm)
   })
 }

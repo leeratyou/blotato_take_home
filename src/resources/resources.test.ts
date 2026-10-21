@@ -6,7 +6,7 @@ import type { AnswerEvent, BusEvent, SendingConfirmEvent } from '@/domain/events
 import resources from '@/resources'
 import { generateAnswerHandler } from '@/resources/answering_engine'
 import { receiveEventHandler } from '@/resources/receiver'
-import { sendAnswerHandler } from '@/resources/sender'
+import { confirmSendingHandler, sendAnswerHandler } from '@/resources/sender'
 import { buildContainer } from '@/services/di_container'
 
 test('resources use shared port bindings and unsubscribe their handlers without an HTTP listener', async t => {
@@ -123,7 +123,7 @@ test('sender subscriptions dispatch answers and track confirmations without send
   assert.equal((await deliveryStore.findByAnswerId(answer.id))?.status, 'confirmed')
 })
 
-test('sender rejects unrelated events and logs dispatch failures once', async t => {
+test('sender handlers reject each other\'s events and log dispatch failures once', async t => {
   const app = Fastify()
   t.after(() => app.close())
   const container = buildContainer(app.log)
@@ -144,9 +144,10 @@ test('sender rejects unrelated events and logs dispatch failures once', async t 
     payload: { text: 'Reply' },
   }
   await assert.rejects(handler({ ...answer, type: 'send', externalId: 'sent-1', payload: { answerId: answer.id } }), TypeError)
+  await assert.rejects(confirmSendingHandler(app)(answer), TypeError)
   assert.equal(dispatch.mock.callCount(), 0)
   await assert.rejects(handler(answer), { message: 'provider unavailable' })
-  assert.equal(errors.mock.callCount(), 2)
+  assert.equal(errors.mock.callCount(), 3)
   assert.equal(dispatch.mock.callCount(), 1)
   assert.equal(publish.mock.callCount(), 0)
 })
