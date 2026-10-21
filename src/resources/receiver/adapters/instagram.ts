@@ -58,7 +58,8 @@ function event(
     participantId,
     kind,
     externalId,
-    // Assumes comment authors and message senders share one account-scoped id (see RESEARCH.md, identity).
+    // Assumes a comment author's id equals their DM sender id. Unverified: Meta returns the recipient's
+    // messaging id in the first private reply's response, and it may differ.
     conversationId: `${source}:${accountId}:${participantId}`,
     occurredAt,
     text: body,
