@@ -18,7 +18,7 @@ Dashed arrows represent event connections. The solid connector associates the an
 | --- | --- |
 | SNS Receiver | Supplies incoming SNS events and receives delivery-confirmation events when the integration provides them. |
 | Load balancers | Distribute work at four boundaries: receiving, answering, sending, and analytics. Their concrete implementation is not selected in the PDF. |
-| Receiver adapters | Match, filter, and convert incoming SNS events into internal New events. The source associates these adapters with idempotency metadata. |
+| Receiver resource | Adapters validate and normalize incoming SNS events into domain types. The receiver use case applies business matching and filtering before publishing New events. The source groups these responsibilities and associates them with idempotency metadata. |
 | Event bus | Connects producers and consumers of New, Answer, and Send events. The source lists `kafka`, `postgres`, `rabbit`, and `MtM dbs`; it does not select a technology or require all four. |
 | Answering engines | Consume events and produce Answer events. Their associated resources include conversation context, customer rules, and an Answer. LLMs, patterns, and templates are listed as answer-generation approaches. |
 | Sender adapters | Consume events from the bus, invoke the SNS Sender, and publish Send events. |
@@ -28,7 +28,7 @@ Dashed arrows represent event connections. The solid connector associates the an
 ## Event flow
 
 1. **Receive:** SNS Receiver emits an SNS event. The receiving load balancer routes it to a receiver adapter.
-2. **Normalize:** The adapter applies matching, filtering, and conversion, then publishes a New event to the bus. The source lists `message`, `confirm`, and `any` as New-event categories.
+2. **Normalize:** The adapter validates and converts the external payload to a domain event. The receiver use case applies business matching and filtering, then publishes a New event to the bus. The source lists `message`, `confirm`, and `any` as New-event categories.
 3. **Answer:** An answering consumer receives bus events through its distribution stage. Its answering engine uses the associated context, rules, and answer-generation resources, then publishes an Answer event back to the bus.
 4. **Send:** A sender consumer receives bus events through its distribution stage. Its adapter invokes SNS Sender and separately publishes a Send event to the bus. The PDF does not establish that a Send event means successful delivery.
 5. **Confirm:** When the integration provides a delivery-confirmation event, it returns to SNS Receiver and follows the ingestion path again.
@@ -59,15 +59,21 @@ The following contracts need to be defined before implementing the diagram:
 - `src/app.ts`: Fastify server entry point
 - `src/routes.ts`: HTTP route registration
 - `src/resources.ts`: registers answering-engine, sender, and receiver resources.
+- `src/domain/events.ts`: shared event envelopes and the New, Answer, and Send event types.
+- `src/domain/ports.ts`: narrow event-publishing and message-sending interfaces.
 - `src/resources/<name>/index.ts`: event-handler factories and subscription registration.
-- `src/resources/<name>/<name>.usecases.ts`: plain use-case functions with explicit service and logger dependencies.
-- `src/services/di_container.ts`: Awilix DI container; registers the logger and service singletons.
+- `src/resources/<name>/<name>.usecases.ts`: plain use-case functions with explicit port and domain-event dependencies.
+- `src/services/di_container.ts`: Awilix DI container; registers the logger, service singletons, and port bindings.
 - `Architecture.pdf`: source diagram for the target system.
 - `Architecture.mermaid.md`: editable Mermaid transcription and source annotations.
 
 ## Resource handlers and lifecycle
 
-Each resource follows the handler-factory pattern: resolve dependencies from `app.diContainer`, return an async event handler, and delegate to the resource's use-case functions. Handlers log errors and rethrow them. Use cases receive services, the logger, and event data explicitly; they do not depend on Fastify.
+Each resource follows the handler-factory pattern: resolve dependencies from `app.diContainer`, return an async event handler, and delegate to the resource's use-case functions. Handlers log errors once and rethrow them. Use cases import only domain contracts and receive ports and domain-event data explicitly. Logging remains in handlers because the current use cases do not need a logging port.
+
+`EventBus` implements `EventPublisher`; `OuterSender` implements `MessageSender`. The DI container binds `eventPublisher` to the existing `eventBus` singleton and `messageSender` to `outerSender`. Subscription management remains in resource adapters and concrete services, outside the use-case ports.
+
+The receiver adapter currently accepts a minimal generic envelope with an own non-empty string `id` and an own `payload` field. It creates an `IncomingEvent` before calling the use case. The payload remains opaque until a provider-specific schema is defined; this validation does not claim to validate a complete SNS event. Answering and sender handlers reject mismatched event kinds before invoking their use cases.
 
 The answering engine subscribes to `new` events, the sender subscribes to `answer` events, and the receiver subscribes to external events. Resources register subscriptions in `onReady`, with bus consumers registered before external intake. Each `onClose` hook calls the service's `unsubscribe` method with the same handler before DI disposal. Subscription methods retain callbacks and also return cleanup functions; external event delivery, sends, and business use cases remain explicit stubs.
 

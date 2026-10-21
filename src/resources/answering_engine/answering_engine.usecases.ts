@@ -1,10 +1,9 @@
-import type { FastifyBaseLogger } from 'fastify'
-import type { BusEvent, EventBus } from '@/services/event_bus'
+import type { NewEvent } from '@/domain/events'
+import type { EventPublisher } from '@/domain/ports'
 
 export async function generateAnswer(
-  eventBus: EventBus,
-  logger: FastifyBaseLogger,
-  event: BusEvent,
+  publisher: EventPublisher,
+  event: NewEvent,
 ): Promise<void> {
   // TODO: Load context and rules, generate an answer, and publish the resulting event.
   throw new Error('generateAnswer is not implemented')

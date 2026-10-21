@@ -1,11 +1,10 @@
-import type { FastifyBaseLogger } from 'fastify'
-import type { EventBus } from '@/services/event_bus'
+import type { IncomingEvent } from '@/domain/events'
+import type { EventPublisher } from '@/domain/ports'
 
 export async function receiveEvent(
-  eventBus: EventBus,
-  logger: FastifyBaseLogger,
-  event: unknown,
+  publisher: EventPublisher,
+  event: IncomingEvent,
 ): Promise<void> {
-  // TODO: Match, filter, convert, and publish incoming events.
+  // TODO: Apply business matching and filtering, then publish a New event.
   throw new Error('receiveEvent is not implemented')
 }

@@ -1,12 +1,9 @@
-export type BusEvent = {
-  id: string
-  type: 'new' | 'answer' | 'send'
-  payload: unknown
-}
+import type { BusEvent } from '@/domain/events'
+import type { EventPublisher } from '@/domain/ports'
 
 export type BusEventHandler = (event: BusEvent) => Promise<void>
 
-export class EventBus {
+export class EventBus implements EventPublisher {
   // Append-only, in-memory: lost on restart, not shared between instances, unbounded.
   // Replace with a durable store (Postgres outbox) before production.
   private readonly events: BusEvent[] = []
@@ -26,7 +23,7 @@ export class EventBus {
     if (handlers?.size === 0) this.handlers.delete(type)
   }
 
-  send(): void {
+  async send(event: BusEvent): Promise<void> {
     throw new Error('EventBus.send is not implemented')
   }
 }
