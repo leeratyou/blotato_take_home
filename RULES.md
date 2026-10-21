@@ -35,3 +35,4 @@ flowchart TB
 ## **Commits**
 
 - Commit messages use `<CONTEXT>[, <CONTEXT>]: short description` with at most three contexts in one commit. Split larger changes into different commits per finished logical blocks
+- All not yet pushed commit not fitted to this scheme should be rename on every 'commit' command
