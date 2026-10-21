@@ -8,6 +8,7 @@ Instructions for coding agents working in this repo.
 - Run with tsx (no build step); `tsc` is used for type checking only
 - TypeScript only: all source files are `.ts`, no `.js`
 - Import alias: `@/*` maps to `src/*`; imports have no extension (e.g. `@/lib/x`)
+- DI: Awilix via `@fastify/awilix` (PROXY mode, strict). Register dependencies and their `Cradle` types in the app's DI container module; resolve them from `request.diScope` in routes or `app.diContainer` elsewhere
 
 ## Commands
 
