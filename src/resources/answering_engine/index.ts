@@ -8,7 +8,9 @@ export function generateAnswerHandler(app: FastifyInstance) {
 
   return async (event: BusEvent): Promise<void> => {
     try {
-      if (event.type !== 'new') throw new TypeError('Expected a new event')
+      if (event.type !== 'comment_received' && event.type !== 'dm_message') {
+        throw new TypeError('Expected a comment_received or dm_message event')
+      }
       await generateAnswer(ports, event)
     } catch (err) {
       logger.error({ err, eventId: event.id }, 'Failed to generate answer')
@@ -22,10 +24,12 @@ export default async function answeringEngine(app: FastifyInstance) {
   const handler = generateAnswerHandler(app)
 
   app.addHook('onReady', async () => {
-    eventBus.subscribe('new', handler)
+    eventBus.subscribe('comment_received', handler)
+    eventBus.subscribe('dm_message', handler)
   })
 
   app.addHook('onClose', async () => {
-    eventBus.unsubscribe('new', handler)
+    eventBus.unsubscribe('comment_received', handler)
+    eventBus.unsubscribe('dm_message', handler)
   })
 }

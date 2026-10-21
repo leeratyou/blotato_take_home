@@ -12,7 +12,8 @@ export async function receiveEvent(ports: ReceiverPorts, event: InboundEvent): P
   // TODO: Apply business matching and filtering before publishing.
   // A crash between claim and send loses the event; a transactional outbox closes this gap.
   try {
-    await ports.publisher.send({ ...event, type: 'new' })
+    const { kind, ...payload } = event
+    await ports.publisher.send({ ...payload, type: kind })
   } catch (err) {
     // Without release, the provider's retry would be dropped as a duplicate.
     await ports.idempotency.release(event.id)

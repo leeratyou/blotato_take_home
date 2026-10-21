@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { fastifyAwilixPlugin } from '@fastify/awilix'
 import Fastify from 'fastify'
+import type { SendingConfirmEvent } from '@/domain/events'
 import resources from '@/resources'
+import { generateAnswerHandler } from '@/resources/answering_engine'
 import { receiveEventHandler } from '@/resources/receiver'
 import { buildContainer } from '@/services/di_container'
 
@@ -24,18 +26,42 @@ test('resources use shared port bindings and unsubscribe their handlers without 
   await app.ready()
 
   assert.equal(app.server.listening, false)
-  assert.deepEqual(busSubscribe.mock.calls.map(call => call.arguments[0]), ['new', 'answer'])
+  assert.deepEqual(busSubscribe.mock.calls.map(call => call.arguments[0]), ['comment_received', 'dm_message', 'answer'])
   assert.equal(outerSubscribe.mock.callCount(), 1)
   const subscriptions = new Map(busSubscribe.mock.calls.map(call => call.arguments))
 
   await app.close()
 
-  assert.deepEqual(busUnsubscribe.mock.calls.map(call => call.arguments[0]).sort(), ['answer', 'new'])
+  assert.deepEqual(busUnsubscribe.mock.calls.map(call => call.arguments[0]).sort(), ['answer', 'comment_received', 'dm_message'])
   for (const { arguments: [type, handler] } of busUnsubscribe.mock.calls) {
     assert.equal(handler, subscriptions.get(type))
   }
   assert.equal(outerUnsubscribe.mock.callCount(), 1)
   assert.equal(outerUnsubscribe.mock.calls[0]?.arguments[0], outerSubscribe.mock.calls[0]?.arguments[0])
+})
+
+test('answering handler rejects send confirmations before publishing an answer', async t => {
+  const app = Fastify()
+  t.after(() => app.close())
+  const container = buildContainer(app.log)
+  const publish = t.mock.method(container.cradle.eventBus, 'send', async () => {})
+  const errors = t.mock.method(app.log, 'error')
+  await app.register(fastifyAwilixPlugin, { container })
+  await app.ready()
+  const confirmation: SendingConfirmEvent = {
+    id: 'instagram:sending_confirm:mid-1',
+    type: 'sending_confirm',
+    source: 'instagram',
+    externalId: 'mid-1',
+    conversationId: 'instagram:acct-1:user-1',
+    occurredAt: '2026-10-21T00:00:00.000Z',
+    text: 'pricing',
+  }
+
+  await assert.rejects(generateAnswerHandler(app)(confirmation), TypeError)
+
+  assert.equal(publish.mock.callCount(), 0)
+  assert.equal(errors.mock.callCount(), 1)
 })
 
 test('receiver rejects unusable bodies, drops malformed items, and logs each failure once', async t => {

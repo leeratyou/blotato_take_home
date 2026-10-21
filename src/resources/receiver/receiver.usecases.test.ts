@@ -28,17 +28,27 @@ function fakeStore(): IdempotencyStore {
   }
 }
 
-test('receiveEvent publishes a New event once per idempotency key', async () => {
-  const published: BusEvent[] = []
-  const publisher: EventPublisher = { send: async e => void published.push(e) }
+for (const kind of ['comment_received', 'dm_message', 'sending_confirm'] as const) {
+  test(`receiveEvent publishes ${kind} once per idempotency key`, async () => {
+    const published: BusEvent[] = []
+    const publisher: EventPublisher = { send: async e => void published.push(e) }
+    const ports = { publisher, idempotency: fakeStore() }
+    const inbound = { ...event, id: `instagram:${kind}:c-1`, kind }
 
-  const ports = { publisher, idempotency: fakeStore() }
+    await receiveEvent(ports, inbound)
+    await receiveEvent(ports, inbound)
 
-  await receiveEvent(ports, event)
-  await receiveEvent(ports, event)
-
-  assert.deepEqual(published, [{ ...event, type: 'new' }])
-})
+    assert.deepEqual(published, [{
+      id: inbound.id,
+      type: kind,
+      source: 'instagram',
+      externalId: 'c-1',
+      conversationId: 'instagram:acct-1:user-1',
+      occurredAt: '2023-11-14T22:13:20.000Z',
+      text: 'pricing',
+    }])
+  })
+}
 
 test('receiveEvent releases the key when publishing fails, so a retry is not dropped', async () => {
   const published: BusEvent[] = []
@@ -55,7 +65,8 @@ test('receiveEvent releases the key when publishing fails, so a retry is not dro
   fail = false
   await receiveEvent(ports, event)
 
-  assert.deepEqual(published, [{ ...event, type: 'new' }])
+  const { kind, ...payload } = event
+  assert.deepEqual(published, [{ ...payload, type: kind }])
 })
 
 test('receiveEvents processes every event and reports failures together', async () => {
