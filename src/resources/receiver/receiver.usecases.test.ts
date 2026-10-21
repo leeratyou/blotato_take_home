@@ -5,9 +5,9 @@ import type { EventPublisher, IdempotencyStore } from '@/domain/ports'
 import { receiveEvent } from '@/resources/receiver/receiver.usecases'
 
 const event: InboundEvent = {
-  id: 'instagram:comment:c-1',
+  id: 'instagram:comment_received:c-1',
   source: 'instagram',
-  kind: 'comment',
+  kind: 'comment_received',
   externalId: 'c-1',
   conversationId: 'instagram:acct-1:user-1',
   occurredAt: '2023-11-14T22:13:20.000Z',

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseInbound } from '@/resources/receiver/adapters'
 
-test('instagram adapter splits a webhook batch into inbound comments and messages', () => {
+test('instagram adapter splits a webhook batch into comments, DMs, and send confirmations', () => {
   const events = parseInbound('instagram', {
     object: 'instagram',
     entry: [
@@ -16,7 +16,7 @@ test('instagram adapter splits a webhook batch into inbound comments and message
         ],
         messaging: [
           { sender: { id: 'user-1' }, timestamp: 1_700_000_005_000, message: { mid: 'mid-1', text: 'a@b.co' } },
-          { sender: { id: 'acct-1' }, timestamp: 1_700_000_006_000, message: { mid: 'mid-2', is_echo: true } },
+          { sender: { id: 'acct-1' }, recipient: { id: 'user-1' }, timestamp: 1_700_000_006_000, message: { mid: 'mid-2', text: 'Link', is_echo: true } },
           { sender: { id: 'user-1' }, timestamp: 1_700_000_007_000, message: { mid: 'mid-3', attachments: [] } },
           { sender: { id: 'user-1' }, timestamp: 1_700_000_008_000, read: { mid: 'mid-2' } },
         ],
@@ -26,27 +26,36 @@ test('instagram adapter splits a webhook batch into inbound comments and message
 
   assert.deepEqual(events, [
     {
-      id: 'instagram:comment:c-1',
+      id: 'instagram:comment_received:c-1',
       source: 'instagram',
-      kind: 'comment',
+      kind: 'comment_received',
       externalId: 'c-1',
       conversationId: 'instagram:acct-1:user-1',
       occurredAt: '2023-11-14T22:13:20.000Z',
       text: 'pricing',
     },
     {
-      id: 'instagram:message:mid-1',
+      id: 'instagram:dm_message:mid-1',
       source: 'instagram',
-      kind: 'message',
+      kind: 'dm_message',
       externalId: 'mid-1',
       conversationId: 'instagram:acct-1:user-1',
       occurredAt: '2023-11-14T22:13:25.000Z',
       text: 'a@b.co',
     },
     {
-      id: 'instagram:message:mid-3',
+      id: 'instagram:sending_confirm:mid-2',
       source: 'instagram',
-      kind: 'message',
+      kind: 'sending_confirm',
+      externalId: 'mid-2',
+      conversationId: 'instagram:acct-1:user-1',
+      occurredAt: '2023-11-14T22:13:26.000Z',
+      text: 'Link',
+    },
+    {
+      id: 'instagram:dm_message:mid-3',
+      source: 'instagram',
+      kind: 'dm_message',
       externalId: 'mid-3',
       conversationId: 'instagram:acct-1:user-1',
       occurredAt: '2023-11-14T22:13:27.000Z',
@@ -64,6 +73,7 @@ test('adapters reject unknown sources and malformed instagram payloads', () => {
     { object: 'instagram', entry: [{ time: 1 }] },
     { object: 'instagram', entry: [{ id: 'acct-1', changes: [{ field: 'comments', value: { id: 'c-1', from: { id: 'u' } } }] }] },
     { object: 'instagram', entry: [{ id: 'acct-1', messaging: [{ sender: { id: 'u' }, timestamp: 1, message: { text: 'hi' } }] }] },
+    { object: 'instagram', entry: [{ id: 'acct-1', messaging: [{ sender: { id: 'acct-1' }, timestamp: 1, message: { mid: 'm', is_echo: true } }] }] },
   ]
   for (const raw of malformed) assert.throws(() => parseInbound('instagram', raw), TypeError)
 })

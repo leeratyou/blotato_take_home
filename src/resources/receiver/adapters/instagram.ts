@@ -1,7 +1,7 @@
 import type { InboundEvent } from '@/domain/events'
 
 // Instagram webhook payload: { object: 'instagram', entry: [{ id, time, changes?, messaging? }] }.
-// Only inbound comments and messages are normalized; other fields and own echoes are skipped.
+// Normalizes participant comments and DMs, plus message echoes as send confirmations; other fields are skipped.
 
 const source = 'instagram'
 
@@ -68,11 +68,11 @@ function parseComment(item: unknown, accountId: string, entry: Json, entryPath: 
 
   const value = object(change.value, `${path}.value`)
   const authorId = id(object(value.from, `${path}.value.from`).id, `${path}.value.from.id`)
-  if (authorId === accountId) return [] // Own reply
+  if (authorId === accountId) return [] // Own reply; the payload lacks the participant, so it cannot be a sending_confirm
 
   return [
     event(
-      'comment',
+      'comment_received',
       id(value.id, `${path}.value.id`),
       accountId,
       authorId,
@@ -87,14 +87,18 @@ function parseMessage(item: unknown, accountId: string, path: string): InboundEv
   if (messaging.message === undefined) return [] // Read receipts, reactions, postbacks
 
   const message = object(messaging.message, `${path}.message`)
-  if (message.is_echo === true || message.is_deleted === true) return [] // Own outgoing copy or deletion notice
+  if (message.is_deleted === true) return [] // Deletion notice
+
+  // An echo is the account's own sent message, so the participant is its recipient.
+  const echo = message.is_echo === true
+  const participant = echo ? 'recipient' : 'sender'
 
   return [
     event(
-      'message',
+      echo ? 'sending_confirm' : 'dm_message',
       id(message.mid, `${path}.message.mid`),
       accountId,
-      id(object(messaging.sender, `${path}.sender`).id, `${path}.sender.id`),
+      id(object(messaging[participant], `${path}.${participant}`).id, `${path}.${participant}.id`),
       time(messaging.timestamp, `${path}.timestamp`),
       text(message.text, `${path}.message.text`),
     ),
