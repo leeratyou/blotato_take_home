@@ -1,35 +1,33 @@
 # Architecture
 
-One Node 26 / TypeScript / Fastify process. Awilix supplies dependencies; `tsx` runs the source without a build step. Instagram is the only supported source. The only HTTP route is `GET /healthcheck`.
+An event-driven backend for social-network message automation. It currently runs as one Node 26 / TypeScript / Fastify application, with Awilix providing dependencies and `tsx` running the source.
 
-## Processing flow
+## Components
 
-| Input | Processing | Output |
-| --- | --- | --- |
-| External payload | Receiver parses and deduplicates items | `comment_received`, `dm_message`, or `sending_confirm` |
-| Comment or DM event | Answering engine uses fixed `Stub answer` text | `answer` |
-| `answer` | Sender dispatches the reply and records its receipt | `send` |
-| `sending_confirm` | Sender updates delivery state | No outgoing message |
+| Component | Responsibility |
+| --- | --- |
+| Receiver | Converts provider payloads into internal events and deduplicates incoming work. |
+| Event bus | Connects resources through typed events and subscriptions. |
+| Answering engine | Consumes comments and DMs and produces replies. |
+| Sender | Converts replies into provider requests, records accepted sends, and handles confirmations. |
+| State stores | Track processed event IDs and outgoing message state. |
 
-The flow is wired but not live: `EventBus.send` and `OuterSender.send` throw; `OuterReceiver` only stores callbacks. No component consumes `send`.
+## Event flow
 
-Answers carry explicit account, participant, and reply-target IDs. Comment replies target the comment ID; DM replies target the participant ID. `conversationId` is used for correlation, never parsed for routing.
+Comments and DMs become `comment_received` or `dm_message` events. The answering engine publishes `answer`; the sender dispatches it and publishes `send`.
 
-## Code map
+Provider echoes become `sending_confirm` events and update sending state without triggering another reply. Events carry explicit routing IDs; `conversationId` correlates work across stages.
+
+## Code structure
 
 - `src/domain/`: event types and dependency interfaces.
-- `src/resources/`: application logic, handlers, subscriptions, and source adapters.
-- `src/services/`: integration boundaries, in-memory stores, and DI registrations.
-- `src/app.ts`: startup and shutdown. Consumers subscribe on readiness and unsubscribe on close.
+- `src/resources/`: use cases, event handlers, and provider adapters.
+- `src/services/`: integration boundaries, storage implementations, and DI setup.
 
-Use cases depend on domain interfaces; handlers resolve dependencies and log errors.
+Use cases depend on domain interfaces. Handlers resolve dependencies, manage subscriptions, and log failures. Subscriptions start on application readiness and stop on close.
 
-## State and limits
+## Current state
 
-- Receiver deduplication lasts seven days. Concurrent duplicate claims still have a known gap; see [PLAN.md](PLAN.md).
-- Sender shares concurrent work for the same answer and saves receipts before publishing `send`, so publication retries reuse accepted sends.
-- Delivery state is `sent` or `confirmed`. Early confirmations are retained. Confirmation means a provider echo, not recipient delivery or reading.
-- State is local to one process and lost on restart. Delivery records have no retention limit; crash-safe processing and coordination across workers are not implemented.
-- Matching, real answer generation, conversation loading, ordering, analytics, and durable queues remain future work.
+Instagram adapters, processing functions, and subscription wiring are implemented. Answer generation uses placeholder text, and state is stored in process memory. External intake, event-bus publication, and outbound transport remain stubs, so the pipeline is not live.
 
-See [RULES.md](RULES.md) for dependency rules.
+See [RULES.md](RULES.md) for dependency rules and [PLAN.md](PLAN.md) for remaining work and open questions.
