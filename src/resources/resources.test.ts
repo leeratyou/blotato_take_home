@@ -47,23 +47,26 @@ test('receiver validates external envelopes and logs each failure once', async t
   await app.register(resources)
   await app.ready()
   const handler = receiveEventHandler(app)
-  const malformed = [
-    undefined,
-    null,
-    [],
-    'event',
-    {},
-    { id: 1, payload: null },
-    { id: ' ', payload: null },
-    { id: 'event-1' },
+  const malformed: [string, unknown][] = [
+    ['unknown', { object: 'instagram', entry: [] }],
+    ['instagram', undefined],
+    ['instagram', null],
+    ['instagram', []],
+    ['instagram', 'event'],
+    ['instagram', {}],
+    ['instagram', { object: 'instagram', entry: [{ id: ' ' }] }],
   ]
 
-  for (const [index, event] of malformed.entries()) {
-    await assert.rejects(handler(event), TypeError)
+  for (const [index, [source, event]] of malformed.entries()) {
+    await assert.rejects(handler(source, event), TypeError)
     assert.equal(errors.mock.callCount(), index + 1)
   }
 
-  await assert.rejects(handler({ id: 'event-1', payload: null }), {
+  await handler('instagram', { object: 'instagram', entry: [] })
+  assert.equal(errors.mock.callCount(), malformed.length)
+
+  const comment = { field: 'comments', value: { id: 'c-1', text: 'pricing', from: { id: 'user-1' } } }
+  await assert.rejects(handler('instagram', { object: 'instagram', entry: [{ id: 'acct-1', time: 1, changes: [comment] }] }), {
     name: 'Error',
     message: 'receiveEvent is not implemented',
   })

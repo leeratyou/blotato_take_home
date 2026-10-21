@@ -21,7 +21,7 @@ flowchart TB
 | --- | --- | --- | --- |
 | Entities and ports | `src/domain/` | Domain types (events, rules, runs), pure business rules, and narrow port interfaces required by current use cases | Only `src/domain/` |
 | Use cases | `src/resources/<name>/<name>.usecases.ts` | Application logic as functions; external dependencies are passed explicitly as ports | Entities, ports, other use cases, and application helpers in the same layer |
-| Interface adapters | `src/resources/<name>/index.ts` | Fastify plugins: resolve dependencies, manage subscriptions, validate and normalize external payloads, call use cases, log and handle errors | Fastify, Awilix, container, use cases, entities, ports, and other adapters |
+| Interface adapters | `src/resources/<name>/index.ts`, `src/resources/<name>/adapters/` | Fastify plugins: resolve dependencies, manage subscriptions, validate and normalize external payloads, call use cases, log and handle errors | Fastify, Awilix, container, use cases, entities, ports, and other adapters |
 | Frameworks and drivers | `src/app.ts`, `src/routes.ts`, `src/resources.ts`, `src/services/` | Fastify, Awilix, event bus, outer receiver and sender, future database; implementations of the ports | Anything |
 
 - Domain and use-case files never import Fastify, Awilix, interface adapters, or `src/services/*`, including through `import type`. Shared application helpers follow the same restrictions as use cases.

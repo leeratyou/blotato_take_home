@@ -64,7 +64,8 @@ The following contracts need to be defined before implementing the diagram:
 - `src/app.ts`: Fastify server entry point
 - `src/routes.ts`: HTTP route registration
 - `src/resources.ts`: registers answering-engine, sender, and receiver resources.
-- `src/domain/events.ts`: shared event envelopes and the New, Answer, and Send event types.
+- `src/domain/events.ts`: the normalized `InboundEvent` and the New, Answer, and Send event types.
+- `src/resources/receiver/adapters/`: one parser per event source (currently `instagram.ts`) and the source-to-parser lookup in `index.ts`.
 - `src/domain/ports.ts`: narrow event-publishing and message-sending interfaces.
 - `src/resources/<name>/index.ts`: event-handler factories and subscription registration.
 - `src/resources/<name>/<name>.usecases.ts`: plain use-case functions with explicit port and domain-event dependencies.
@@ -78,7 +79,7 @@ Each resource follows the handler-factory pattern: resolve dependencies from `ap
 
 `EventBus` implements `EventPublisher`; `OuterSender` implements `MessageSender`. The DI container binds `eventPublisher` to the existing `eventBus` singleton and `messageSender` to `outerSender`. Subscription management remains in resource adapters and concrete services, outside the use-case ports.
 
-The receiver adapter currently accepts a minimal generic envelope with an own non-empty string `id` and an own `payload` field. It creates an `IncomingEvent` before calling the use case. The payload remains opaque until a provider-specific schema is defined; this validation does not claim to validate a complete SNS event. Answering and sender handlers reject mismatched event kinds before invoking their use cases.
+`OuterReceiver` delivers each raw event together with a `source` name. The receiver handler selects that source's parser from `src/resources/receiver/adapters/`. The parser validates the payload and returns a list of normalized `InboundEvent`s, because one webhook can batch several events. The handler then calls the use case once per event. Unknown sources and malformed payloads raise `TypeError`. The Instagram parser emits only inbound comments and messages. It skips the account's own replies and echoes, deleted messages, read receipts, reactions, and other webhook fields. Answering and sender handlers reject mismatched event kinds before invoking their use cases.
 
 The answering engine subscribes to `new` events, the sender subscribes to `answer` events, and the receiver subscribes to external events. Resources register subscriptions in `onReady`, with bus consumers registered before external intake. Each `onClose` hook calls the service's `unsubscribe` method with the same handler before DI disposal. Subscription methods retain callbacks and also return cleanup functions; external event delivery, sends, and business use cases remain explicit stubs.
 

@@ -1,4 +1,5 @@
-export type OuterEventHandler = (event: unknown) => Promise<void>
+// `source` names the integration that delivered the event and selects its parser.
+export type OuterEventHandler = (source: string, event: unknown) => Promise<void>
 
 export class OuterReceiver {
   // The external receiver adapter will deliver events to these handlers.

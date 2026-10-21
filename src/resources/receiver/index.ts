@@ -1,34 +1,18 @@
 import type { FastifyInstance } from 'fastify'
-import type { IncomingEvent } from '@/domain/events'
+import { parseInbound } from '@/resources/receiver/adapters'
 import { receiveEvent } from '@/resources/receiver/receiver.usecases'
-
-function parseIncomingEvent(event: unknown): IncomingEvent {
-  if (typeof event !== 'object' || event === null || Array.isArray(event)) {
-    throw new TypeError('Expected an event object')
-  }
-
-  const input = event as Record<string, unknown>
-  if (
-    !Object.hasOwn(input, 'id') ||
-    typeof input.id !== 'string' ||
-    !input.id.trim() ||
-    !Object.hasOwn(input, 'payload')
-  ) {
-    throw new TypeError('Expected an event with a non-empty id and payload')
-  }
-
-  return { id: input.id, payload: input.payload }
-}
 
 export function receiveEventHandler(app: FastifyInstance) {
   const publisher = app.diContainer.resolve('eventPublisher')
   const logger = app.diContainer.resolve('logger')
 
-  return async (event: unknown): Promise<void> => {
+  return async (source: string, event: unknown): Promise<void> => {
     try {
-      await receiveEvent(publisher, parseIncomingEvent(event))
+      for (const inbound of parseInbound(source, event)) {
+        await receiveEvent(publisher, inbound)
+      }
     } catch (err) {
-      logger.error({ err }, 'Receiver handler failed')
+      logger.error({ err, source }, 'Receiver handler failed')
       throw err
     }
   }
