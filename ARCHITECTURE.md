@@ -40,7 +40,11 @@ The answering resource enclosure contains conversation context, customer rules, 
 
 Receiver adapters, answering engines, sender adapters, and analytics workers are shown as groups of multiple instances. Each group has a separate load-balancing stage, allowing work distribution at each processing boundary.
 
-The receiver adapter has two highlighted annotations: `Idempotency key: recipient_id` and `timestamp`. Their role in key composition, duplicate detection, and deduplication state storage remains to be defined.
+The receiver adapter has two highlighted annotations: `Idempotency key: recipient_id` and `timestamp`. The design does not use either for deduplication (see [MEMORY.md](MEMORY.md)):
+
+- **Idempotency key:** `${source}:${kind}:${providerEventId}`, carried as the incoming event `id`. Sources without an event id fall back to a sha256 of the raw payload. The receiver use case claims the key atomically in an idempotency store with a TTL that covers the provider's redelivery window, and releases it if publishing the New event fails.
+- **`conversationId`** (from `recipient_id`): used only by the answering engine to load the whole conversation. It is also the intended bus partition key, so events from one conversation are consumed in order.
+- **`occurredAt`** (from `timestamp`): the provider's timestamp, used only to order events that arrive out of order because of network latency. Ties are broken by `id`.
 
 All four load-balancer annotations mention message volume affecting system timeouts and give "1M" as an example. The event-bus annotation additionally calls for parallel data handling under that condition. No unit, measured capacity, timeout budget, or numerical scaling threshold is specified.
 
@@ -51,6 +55,7 @@ The following contracts need to be defined before implementing the diagram:
 - Event-bus technology, persistence, retention, and routing between processing stages.
 - Event schemas, identifiers, correlation, and subscription filters for New, Answer, Send, and confirmation events.
 - Storage and update rules for conversation context, customer rules, answers, and idempotency records.
+- How the answering engine handles an older message that arrives after a newer one was already answered.
 - Consumer ownership, processing order, acknowledgements, retries, and recovery after worker failures.
 - The meaning of `MtM dbs` and `Graphna`, preserved here as written in the source.
 
