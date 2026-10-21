@@ -3,13 +3,13 @@ import type { BusEvent } from '@/domain/events'
 import { generateAnswer } from '@/resources/answering_engine/answering_engine.usecases'
 
 export function generateAnswerHandler(app: FastifyInstance) {
-  const publisher = app.diContainer.resolve('eventPublisher')
+  const ports = { publisher: app.diContainer.resolve('eventPublisher') }
   const logger = app.diContainer.resolve('logger')
 
   return async (event: BusEvent): Promise<void> => {
     try {
       if (event.type !== 'new') throw new TypeError('Expected a new event')
-      await generateAnswer(publisher, event)
+      await generateAnswer(ports, event)
     } catch (err) {
       logger.error({ err, eventId: event.id }, 'Failed to generate answer')
       throw err
@@ -26,6 +26,6 @@ export default async function answeringEngine(app: FastifyInstance) {
   })
 
   app.addHook('onClose', async () => {
-    await eventBus.unsubscribe('new', handler)
+    eventBus.unsubscribe('new', handler)
   })
 }

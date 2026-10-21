@@ -3,14 +3,16 @@ import type { BusEvent } from '@/domain/events'
 import { sendAnswer } from '@/resources/sender/sender.usecases'
 
 export function sendAnswerHandler(app: FastifyInstance) {
-  const sender = app.diContainer.resolve('messageSender')
-  const publisher = app.diContainer.resolve('eventPublisher')
+  const ports = {
+    sender: app.diContainer.resolve('messageSender'),
+    publisher: app.diContainer.resolve('eventPublisher'),
+  }
   const logger = app.diContainer.resolve('logger')
 
   return async (event: BusEvent): Promise<void> => {
     try {
       if (event.type !== 'answer') throw new TypeError('Expected an answer event')
-      await sendAnswer(sender, publisher, event)
+      await sendAnswer(ports, event)
     } catch (err) {
       logger.error({ err, eventId: event.id }, 'Sender handler failed')
       throw err
@@ -27,6 +29,6 @@ export default async function sender(app: FastifyInstance) {
   })
 
   app.addHook('onClose', async () => {
-    await eventBus.unsubscribe('answer', handler)
+    eventBus.unsubscribe('answer', handler)
   })
 }
