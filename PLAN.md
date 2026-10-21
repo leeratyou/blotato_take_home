@@ -14,6 +14,11 @@ Fix the receiver review findings so concurrent retries and malformed webhook col
 - [ ] Add a regression test with `changes: {}` and valid `messaging`. Verify the valid message survives and the malformed collection is reported.
 - [ ] Run typecheck and the receiver, adapter, resource, and idempotency-store tests.
 
+## Next: Missing send confirmations
+
+- [ ] Track **Sending unconfirmed** when an accepted send receives no `sending_confirm` within a defined timeout. Preserve the provider receipt and allow a late confirmation to change the status to `confirmed`. Missing confirmation alone must not trigger a resend.
+- [ ] Add tests for on-time, missing, and late confirmations.
+
 ## Next: Kafka bus and high-volume ingestion
 
 Goal: absorb bursts of 1M raw events without webhook timeouts while keeping each conversation in order.
